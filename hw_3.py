@@ -50,14 +50,24 @@ class Prediction:
 
 
     def confusion_matrix_accuracy(self, pred_label, label_test):
-        conf_mx = np.zeros((2, 2))
-        misclassified_idxs = []
-        for num in range(len(pred_label)):
-            conf_mx[pred_label[num], label_test[num]] += 1
-            if pred_label[num] != label_test[num]:
-                misclassified_idxs += [num]
-        accuracy = np.sum(np.diag(conf_mx)) / len(label_test)
-        return conf_mx, accuracy, misclassified_idxs
+        count_right = 0.0
+        misclassified = []
+
+        for i in range(len(pred_label)):
+            if pred_label[i] == label_test[i]:
+                count_right += 1
+            else:
+                misclassified += [i]
+
+        accuracy = count_right / len(pred_label)
+        # conf_mx = np.zeros((2, 2))
+        # misclassified_idxs = []
+        # for num in range(len(pred_label)):
+        #     conf_mx[pred_label[num], label_test[num]] += 1
+        #     if pred_label[num] != label_test[num]:
+        #         misclassified_idxs += [num]
+        # accuracy = np.sum(np.diag(conf_mx)) / len(label_test)
+        return accuracy, misclassified
 
 
 class LogisticRegression:
@@ -155,9 +165,8 @@ class LDA:
         w0, wd = self.calc_coefs(pi_prior, mu_list, cov)
         pred_labels = self.lda_classify(xtest_mx, w0, wd)
 
-        conf, acc, mis = predict.confusion_matrix_accuracy(pred_labels, label_test)
+        acc, mis = predict.confusion_matrix_accuracy(pred_labels, label_test)
 
-        print conf
         print acc
         print mis
         # print cov
