@@ -50,7 +50,7 @@ class Prediction:
 
 
     def confusion_matrix_accuracy(self, pred_label, label_test):
-        conf_mx = np.zeros((10, 10))
+        conf_mx = np.zeros((2, 2))
         misclassified_idxs = []
         for num in range(len(pred_label)):
             conf_mx[pred_label[num], label_test[num]] += 1
@@ -150,11 +150,20 @@ class LDA:
             mu_list += [mu_vec]
             cov = self.mle_covariance(xtrain_mx[class_indices, :], mu_vec, label_train, size_n, classes_k)
             cov_list += [cov]
-
         cov = cov_list[0] + cov_list[1]
 
-        print cov
-        print mu_list
+        w0, wd = self.calc_coefs(pi_prior, mu_list, cov)
+        pred_labels = self.lda_classify(xtest_mx, w0, wd)
+
+        conf, acc, mis = predict.confusion_matrix_accuracy(pred_labels, label_test)
+
+        print conf
+        print acc
+        print mis
+        # print cov
+        # print mu_list
+        # print label_train
+        # print pred_labels
 
 
     def prior_prob_y(self, label_train, cls_idx):
@@ -164,17 +173,42 @@ class LDA:
 
 
     def mle_mean(self, xtrain_sub):
-        mu_y = np.sum(xtrain_sub, 0) / xtrain_sub.shape[0]
+        mu_y = np.sum(xtrain_sub, 0) / float(xtrain_sub.shape[0])
 
         return mu_y.reshape((1, xtrain_sub.shape[1]))
 
 
     def mle_covariance(self, xtrain, mu, label_train, size_n, classes_k):
-
-        cov = (np.matrix(xtrain - np.tile(mu, 1)).T * np.matrix(xtrain - np.tile(mu, 1))) / (size_n - classes_k)
+        cov = (np.matrix(xtrain - np.tile(mu, 1)).T * np.matrix(xtrain - np.tile(mu, 1))) / float(size_n - classes_k)
 
         return cov
 
+    def calc_coefs(self, prior_list, mu_list, cov):
+        pi1 = prior_list[0]
+        pi0 = prior_list[1]
+        mu1 = mu_list[0]
+        mu0 = mu_list[1]
+
+        w0 = np.log(pi1 / pi0) - .5 * (mu1 + mu0) * np.linalg.pinv(cov) * (mu1 - mu0).T
+        wd = np.linalg.pinv(cov) * (mu1 - mu0).T
+
+        return np.array(w0)[0][0], wd
+
+
+    def lda_classify(self, x, w0, wd):
+
+        class_predictions = np.zeros((x.shape[0],))
+
+        gx = np.array(w0 + (x * wd))
+        gx = gx.reshape((gx.shape[0], ))
+
+        idx_pos = np.where(gx > 0)[0].tolist()
+        idx_neg = np.where(gx < 0)[0].tolist()
+
+        class_predictions[idx_pos] = 1
+        class_predictions[idx_neg] = -1
+
+        return class_predictions
 
 class Boosting:
     def __init__(self):
@@ -239,7 +273,6 @@ class Boosting:
 
 
 if __name__ == '__main__':
-
     ld = LDA()
 
     ld.lda_manage()
