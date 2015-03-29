@@ -63,9 +63,9 @@ class Prediction:
         # conf_mx = np.zeros((2, 2))
         # misclassified_idxs = []
         # for num in range(len(pred_label)):
-        #     conf_mx[pred_label[num], label_test[num]] += 1
-        #     if pred_label[num] != label_test[num]:
-        #         misclassified_idxs += [num]
+        # conf_mx[pred_label[num], label_test[num]] += 1
+        # if pred_label[num] != label_test[num]:
+        # misclassified_idxs += [num]
         # accuracy = np.sum(np.diag(conf_mx)) / len(label_test)
         return accuracy, misclassified
 
@@ -78,10 +78,10 @@ class LogisticRegression:
         xtrain_mx, xtest_mx, label_train, label_test = ut.get_data
         classes_set_y = set(label_train)  # unique classes in y
 
-        x0 = np.matrix(np.ones((xtrain_mx.shape[0], 1)))
-        xtrain_mx = np.matrix(np.concatenate((np.array(x0), np.array(xtrain_mx)), axis=1))
-        x0 = np.matrix(np.ones((xtest_mx.shape[0], 1)))
-        xtest_mx = np.matrix(np.concatenate((np.array(x0), np.array(xtest_mx)), axis=1))
+        # x0 = np.matrix(np.ones((xtrain_mx.shape[0], 1)))
+        # xtrain_mx = np.matrix(np.concatenate((np.array(x0), np.array(xtrain_mx)), axis=1))
+        # x0 = np.matrix(np.ones((xtest_mx.shape[0], 1)))
+        # xtest_mx = np.matrix(np.concatenate((np.array(x0), np.array(xtest_mx)), axis=1))
         w_shape = (len(classes_set_y), xtrain_mx.shape[1])
         w = np.matrix(np.zeros(w_shape))
 
@@ -135,6 +135,9 @@ class LogisticRegression:
 
 class LDA:
     def __init__(self):
+        """
+
+        """
         pass
 
     def lda_manage(self):
@@ -167,12 +170,38 @@ class LDA:
 
         acc, mis = predict.confusion_matrix_accuracy(pred_labels, label_test)
 
-        print acc
-        print mis
-        # print cov
-        # print mu_list
-        # print label_train
-        # print pred_labels
+        return mis
+
+    def lda_boost_classify(self, x, y):
+        mu_list = []
+        cov_list = []
+        pred_labels = []
+        pi_prior = []
+        class_probs_all = []
+        ut = Util()
+        predict = Prediction()
+
+        classes_set_y = set(y)  # unique classes in y
+
+        size_n = y.shape[0]
+        classes_k = len(classes_set_y)  # unique classes in y
+
+        for cls in classes_set_y:
+            class_indices = np.where(y == cls)[0].tolist()
+
+            pi_prior += [self.prior_prob_y(y, class_indices)]
+            mu_vec = self.mle_mean(x[class_indices, :])
+            mu_list += [mu_vec]
+            cov = self.mle_covariance(x[class_indices, :], mu_vec, y, size_n, classes_k)
+            cov_list += [cov]
+        cov = cov_list[0] + cov_list[1]
+
+        w0, wd = self.calc_coefs(pi_prior, mu_list, cov)
+        # pred_labels = self.lda_classify(xtest_mx, w0, wd)
+        #
+        # acc, mis = predict.confusion_matrix_accuracy(pred_labels, label_test)
+
+        return w0, wd
 
 
     def prior_prob_y(self, label_train, cls_idx):
@@ -219,23 +248,93 @@ class LDA:
 
         return class_predictions
 
+
 class Boosting:
     def __init__(self):
         pass
 
-    def boosting_manage(self, prob, plot=False):
+    def plot_rand_hist(self, prob, plot=False):
+
         sample_size = [100, 200, 300, 400, 500]
-        histograms = []
-        np.random.seed(1000)
         for n in sample_size:
             u = np.random.sample(n)
-            random_sample = self.rand_sampler(n, prob, u)
+            random_sample = self.rand_sampler(n, prob)
 
             if plot:
                 self.plot_histogram(random_sample)
-                plt.savefig('../out/n_' + str(n) + '.png')
+                plt.savefig('./out/n_' + str(n) + '.png')
 
-    def rand_sampler(self, n, prob, u):
+    def boost_manage(self, iteration=500):
+        ut = Util()
+        predict = Prediction()
+        lda = LDA()
+
+        boost_classifier_params = []
+        alphas = []
+        test_error = []
+        train_error = []
+        err_list = [] # Misclassified errors
+
+        xtrain_mx, xtest_mx, label_train, label_test = ut.get_data()
+        classes_set_y = set(label_train)  # unique classes in y
+        boost_final_prediction = np.zeros(xtest_mx.shape[0])
+
+        size_n = label_train.shape[0]
+        boost_predict = np.zeros(size_n)
+        classes_k = len(classes_set_y)  # unique classes in y
+
+        dist_t = np.repeat(1.0 / size_n, size_n)
+
+        for t in range(iteration):
+            # generating random sample
+            bt_sample_idx = self.rand_sampler(size_n, dist_t)
+            # get the parameters to pass to classifier
+            bias, coef = lda.lda_boost_classify(xtrain_mx[bt_sample_idx, :], label_train[bt_sample_idx])
+            # get prediction, accuracy and misclassified rows for test and train data
+            pred_labels_tr = lda.lda_classify(xtrain_mx, bias, coef)
+            pred_labels_ts = lda.lda_classify(xtest_mx, bias, coef)
+            acc_tr, misclassified_tr = predict.confusion_matrix_accuracy(pred_labels_tr, label_train)
+            acc_ts, misclassified_ts = predict.confusion_matrix_accuracy(pred_labels_ts, label_test)
+            test_error.append(len(misclassified_tr)/float(label_train.shape[0]))
+            train_error.append(len(misclassified_ts) / float(label_test.shape[0]))
+            # get error and alpha values
+            err_t = np.sum(dist_t[misclassified_tr])
+            err_list.append(err_t)
+            alpha_t = .5 * np.log((1 - err_t) / err_t)
+            # update the prob distribution and normalize
+            dist_t *= np.exp(-1 * alpha_t * label_train * pred_labels_tr)
+            dist_t /= np.sum(dist_t)
+
+            alphas.append(alpha_t)
+            boost_classifier_params.append((bias, coef))
+            print t, ' ', alpha_t
+
+        for i in range(iteration):
+            w0 = boost_classifier_params[i][0]
+            wd = boost_classifier_params[i][1]
+            preds = lda.lda_classify(xtest_mx, w0, wd)
+            boost_final_prediction += (preds * alphas[i])
+
+        plt.plot(range(1, iteration + 1), np.log(np.array(train_error)), 'b', label="Training Error")
+        plt.plot(range(1, iteration + 1), np.log(np.array(test_error)), 'r', label="Testing Error")
+        plt.savefig('./out/plot.png')
+        pred_vals = self.sign(boost_final_prediction)
+        acc, misc = predict.confusion_matrix_accuracy(pred_vals, label_test)
+
+
+    def sign(self, arr_var):
+
+        vals = np.zeros(arr_var.shape[0])
+
+        idx_pos = np.where(arr_var > 0)[0].tolist()
+        idx_neg = np.where(arr_var <= 0)[0].tolist()
+
+        vals[idx_pos] = 1
+        vals[idx_neg] = -1
+
+        return vals
+
+    def rand_sampler(self, n, prob):
         """
         Generates a random sample of k numbers according to the discrete probability distribution
         n: sample size
@@ -243,6 +342,7 @@ class Boosting:
         """
         cdf = []
         np.random.seed(100)
+        u = np.random.sample(n)
         for k in range(0, len(prob)):
             cdf.append(sum([prob[k] for k in range(0, k + 1)]))
         # u = np.random.sample(n)
@@ -254,7 +354,7 @@ class Boosting:
                 tmp = np.where(u <= cdf[j])[0]
                 rds += np.repeat(j, len(tmp)).tolist()
             else:
-                print j
+
                 tmp = np.where(np.logical_and(u <= cdf[j], u > cdf[j - 1]))[0]
                 rds += np.repeat(j, len(tmp)).tolist()
 
@@ -282,13 +382,12 @@ class Boosting:
 
 
 if __name__ == '__main__':
-    ld = LDA()
-
-    ld.lda_manage()
+    # ld = LDA()
+    # ld.lda_manage()
     # naive_bayes = NaiveBayes()
     # naive_bayes.bayes_manage()
-    # boost = Boosting()
-    # boost.boosting_manage([.2, .19, .07, .14, .4], True)
+    boost = Boosting()
+    boost.boost_manage()
     # logreg = LogisticRegression()
     # logreg.logit_manage(1000)
 
