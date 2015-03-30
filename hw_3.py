@@ -104,16 +104,19 @@ class LogisticRegression:
         conf = predict.confusion_matrix_accuracy(pred_label, label_test)
         print conf
 
-    def logit_classify(self, w, xtest):
+    def logit_classify(self, x, w):
 
-        res = xtest * w.T
-        pred = []
+        pred = np.zeros(x.shape[0])
+        extw = np.exp(x * w.T)
+        res = np.array(extw / (1 + extw)).reshape(x.shape[0])
 
-        for row in res:
-            pred += [np.argmax(row, 1)[0, 0]]
+        ones = np.where(res > 0.5)[0].tolist()
+        minus_ones = np.where(res <= 0.5)[0].tolist()
+
+        pred[ones] = 1
+        pred[minus_ones] = -1
 
         return pred
-
 
     def sofmax(self, w, x, y, cls):
         numerator = np.exp(x * w[cls].T)
@@ -126,11 +129,45 @@ class LogisticRegression:
         # not_cls_idx.append(i)
 
         hxi = (1 - hx[cls_idx]).T * x[cls_idx]
-        minus_hxi = -(hx[not_cls_idx].T) * x[not_cls_idx]
+        minus_hxi = -hx[not_cls_idx].T * x[not_cls_idx]
 
         result = np.matrix(np.array(hxi) + np.array(minus_hxi))
 
         return result
+
+    def online_log_reg(self, x, y):
+
+        indices = np.arange(x.shape[0])
+        np.random.permutation(indices)
+        ut = Util()
+        predict = Prediction()
+        xtrain_mx = x[indices]
+        label_train = y[indices]
+
+        # xtrain_mx, xtest_mx, label_train, label_test = ut.get_data()
+        classes_set_y = set(label_train)  # unique classes in y
+
+        # x0 = np.matrix(np.ones((xtrain_mx.shape[0], 1)))
+        # xtrain_mx = np.matrix(np.concatenate((np.array(x0), np.array(xtrain_mx)), axis=1))
+        # x0 = np.matrix(np.ones((xtest_mx.shape[0], 1)))
+        # xtest_mx = np.matrix(np.concatenate((np.array(x0), np.array(xtest_mx)), axis=1))
+        # w_shape = (len(classes_set_y), xtrain_mx.shape[1])
+
+        eta = .1
+        n, d = xtrain_mx.shape
+        w = np.matrix(np.zeros(d))
+
+        for i in range(n):
+            sigmoid_ywx = 1 / (1 + np.exp(-1 * np.matrix(label_train[i]) * xtrain_mx[i] * w.T))
+            w += eta * (1 - sigmoid_ywx) * label_train[i] * xtrain_mx[i]
+
+        # pred_label = self.logit_classify(w, xtest_mx)
+
+        # acc, misc = predict.confusion_matrix_accuracy(pred_label, label_test)
+        # print acc
+        # print misc
+
+        return w
 
 
 class LDA:
@@ -264,7 +301,7 @@ class Boosting:
                 self.plot_histogram(random_sample)
                 plt.savefig('./out/n_' + str(n) + '.png')
 
-    def boost_manage(self, iteration=500):
+    def boost_manage(self, iteration=1000):
         ut = Util()
         predict = Prediction()
         lda = LDA()
@@ -273,7 +310,7 @@ class Boosting:
         alphas = []
         test_error = []
         train_error = []
-        err_list = [] # Misclassified errors
+        err_list = []  # Misclassified errors
 
         xtrain_mx, xtest_mx, label_train, label_test = ut.get_data()
         classes_set_y = set(label_train)  # unique classes in y
@@ -295,7 +332,7 @@ class Boosting:
             pred_labels_ts = lda.lda_classify(xtest_mx, bias, coef)
             acc_tr, misclassified_tr = predict.confusion_matrix_accuracy(pred_labels_tr, label_train)
             acc_ts, misclassified_ts = predict.confusion_matrix_accuracy(pred_labels_ts, label_test)
-            test_error.append(len(misclassified_tr)/float(label_train.shape[0]))
+            test_error.append(len(misclassified_tr) / float(label_train.shape[0]))
             train_error.append(len(misclassified_ts) / float(label_test.shape[0]))
             # get error and alpha values
             err_t = np.sum(dist_t[misclassified_tr])
@@ -317,10 +354,70 @@ class Boosting:
 
         plt.plot(range(1, iteration + 1), np.log(np.array(train_error)), 'b', label="Training Error")
         plt.plot(range(1, iteration + 1), np.log(np.array(test_error)), 'r', label="Testing Error")
+        legend = plt.legend(loc='lower right', shadow=True, fontsize='small')
         plt.savefig('./out/plot.png')
         pred_vals = self.sign(boost_final_prediction)
         acc, misc = predict.confusion_matrix_accuracy(pred_vals, label_test)
 
+    def boost_manage_logreg(self, iteration=1000):
+        ut = Util()
+        predict = Prediction()
+        lr = LogisticRegression()
+
+        boost_classifier_params = []
+        alphas = []
+        test_error = []
+        train_error = []
+        err_list = []  # Misclassified errors
+        acc_list = []
+
+        xtrain_mx, xtest_mx, label_train, label_test = ut.get_data()
+        classes_set_y = set(label_train)  # unique classes in y
+        boost_final_prediction = np.zeros(xtest_mx.shape[0])
+
+        size_n = label_train.shape[0]
+        boost_predict = np.zeros(size_n)
+        classes_k = len(classes_set_y)  # unique classes in y
+
+        dist_t = np.repeat(1.0 / size_n, size_n)
+
+        for t in range(iteration):
+            # generating random sample
+            bt_sample_idx = self.rand_sampler(size_n, dist_t)
+            # get the parameters to pass to classifier
+            coef = lr.online_log_reg(xtrain_mx[bt_sample_idx, :], label_train[bt_sample_idx])
+            # get prediction, accuracy and misclassified rows for test and train data
+            pred_labels_tr = lr.logit_classify(xtrain_mx, coef)
+            pred_labels_ts = lr.logit_classify(xtest_mx, coef)
+            acc_tr, misclassified_tr = predict.confusion_matrix_accuracy(pred_labels_tr, label_train)
+            acc_ts, misclassified_ts = predict.confusion_matrix_accuracy(pred_labels_ts, label_test)
+            train_error.append(len(misclassified_tr) / float(label_train.shape[0]))
+            test_error.append(len(misclassified_ts) / float(label_test.shape[0]))
+            # get error and alpha values
+            err_t = np.sum(dist_t[misclassified_tr])
+            err_list.append(err_t)
+            alpha_t = .5 * np.log((1 - err_t) / err_t)
+            # update the prob distribution and normalize
+            dist_t *= np.exp(-1 * alpha_t * label_train * pred_labels_tr)
+            dist_t /= np.sum(dist_t)
+
+            alphas.append(alpha_t)
+            boost_classifier_params.append(coef)
+            acc_list.append(acc_ts)
+            print t, acc_ts, acc_tr, alpha_t
+
+        for i in range(iteration):
+            w = boost_classifier_params[i]
+            preds = lr.logit_classify(xtest_mx, w)
+            boost_final_prediction += (preds * alphas[i])
+
+        plt.plot(range(1, iteration + 1), np.array(train_error), 'b', label="Training Error")
+        plt.plot(range(1, iteration + 1), np.array(test_error), 'r', label="Testing Error")
+        legend = plt.legend(loc='upper right', shadow=True, fontsize='small')
+        plt.savefig('./out/plot_logreg.png')
+        pred_vals = self.sign(boost_final_prediction)
+        acc, misc = predict.confusion_matrix_accuracy(pred_vals, label_test)
+        print acc
 
     def sign(self, arr_var):
 
@@ -387,7 +484,7 @@ if __name__ == '__main__':
     # naive_bayes = NaiveBayes()
     # naive_bayes.bayes_manage()
     boost = Boosting()
-    boost.boost_manage()
+    boost.boost_manage_logreg()
     # logreg = LogisticRegression()
-    # logreg.logit_manage(1000)
+    # logreg.online_log_reg()
 
