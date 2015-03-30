@@ -311,6 +311,7 @@ class Boosting:
         test_error = []
         train_error = []
         err_list = []  # Misclassified errors
+        three_points_prob = []
 
         xtrain_mx, xtest_mx, label_train, label_test = ut.get_data()
         classes_set_y = set(label_train)  # unique classes in y
@@ -332,8 +333,8 @@ class Boosting:
             pred_labels_ts = lda.lda_classify(xtest_mx, bias, coef)
             acc_tr, misclassified_tr = predict.confusion_matrix_accuracy(pred_labels_tr, label_train)
             acc_ts, misclassified_ts = predict.confusion_matrix_accuracy(pred_labels_ts, label_test)
-            test_error.append(len(misclassified_tr) / float(label_train.shape[0]))
-            train_error.append(len(misclassified_ts) / float(label_test.shape[0]))
+            train_error.append(len(misclassified_tr) / float(label_train.shape[0]))
+            test_error.append(len(misclassified_ts) / float(label_test.shape[0]))
             # get error and alpha values
             err_t = np.sum(dist_t[misclassified_tr])
             err_list.append(err_t)
@@ -342,20 +343,44 @@ class Boosting:
             dist_t *= np.exp(-1 * alpha_t * label_train * pred_labels_tr)
             dist_t /= np.sum(dist_t)
 
+            three_points_prob.append([dist_t[0], dist_t[7], dist_t[482]])
             alphas.append(alpha_t)
+            # collect bias and coefficient parameters in a list to use later
             boost_classifier_params.append((bias, coef))
-            print t, ' ', alpha_t
+            print t, ' ', alpha_t, misclassified_tr
 
+        three_points_prob = np.array(three_points_prob)
         for i in range(iteration):
             w0 = boost_classifier_params[i][0]
             wd = boost_classifier_params[i][1]
             preds = lda.lda_classify(xtest_mx, w0, wd)
             boost_final_prediction += (preds * alphas[i])
 
-        plt.plot(range(1, iteration + 1), np.log(np.array(train_error)), 'b', label="Training Error")
-        plt.plot(range(1, iteration + 1), np.log(np.array(test_error)), 'r', label="Testing Error")
-        legend = plt.legend(loc='lower right', shadow=True, fontsize='small')
-        plt.savefig('./out/plot.png')
+        fig1 = plt.figure()
+        ax1 = plt.subplot(211)
+        ax1.plot(range(1, iteration + 1), np.array(train_error), '#3288bd', label="Training Error")
+        ax1.plot(range(1, iteration + 1), np.array(test_error), '#d53e4f', label="Testing Error")
+        ax1.set_title("Training and Testing Error per Iteration")
+        legend = ax1.legend(loc='upper right', shadow=True, fontsize='small')
+        plt.savefig('./out/lda_train_test_err.png')
+
+        fig2 = plt.figure()
+        ax2 = plt.subplot(211)
+        ax2.plot(range(1, iteration + 1), np.array(alphas), '#99d594', label="alpha_t")
+        ax2.plot(range(1, iteration + 1), np.array(err_list), '#fc8d59', label="error_t")
+        ax2.set_title("alpha and Error per Iteration")
+        legend = ax2.legend(loc='upper right', shadow=True, fontsize='small')
+        plt.savefig('./out/lda_alpha_err_plot.png')
+
+        fig3 = plt.figure()
+        ax3 = plt.subplot(211)
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 0], '#99d594', label="x[0]")
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 1], '#d6604d', label="x[7]")
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 2], '#4393c3', label="x[492]")
+        ax3.set_title("Weights of Three Points as a Function of their Iteration")
+        legend = ax3.legend(loc='upper center', shadow=True, fontsize='x-small')
+        plt.savefig('./out/lda_three_points_weight_plot.png')
+
         pred_vals = self.sign(boost_final_prediction)
         acc, misc = predict.confusion_matrix_accuracy(pred_vals, label_test)
 
@@ -370,6 +395,7 @@ class Boosting:
         train_error = []
         err_list = []  # Misclassified errors
         acc_list = []
+        three_points_prob = []
 
         xtrain_mx, xtest_mx, label_train, label_test = ut.get_data()
         classes_set_y = set(label_train)  # unique classes in y
@@ -404,17 +430,40 @@ class Boosting:
             alphas.append(alpha_t)
             boost_classifier_params.append(coef)
             acc_list.append(acc_ts)
+            three_points_prob.append([dist_t[0], dist_t[7], dist_t[492]])
             print t, acc_ts, acc_tr, alpha_t
 
+        three_points_prob = np.array(three_points_prob)
         for i in range(iteration):
             w = boost_classifier_params[i]
             preds = lr.logit_classify(xtest_mx, w)
             boost_final_prediction += (preds * alphas[i])
 
-        plt.plot(range(1, iteration + 1), np.array(train_error), 'b', label="Training Error")
-        plt.plot(range(1, iteration + 1), np.array(test_error), 'r', label="Testing Error")
-        legend = plt.legend(loc='upper right', shadow=True, fontsize='small')
-        plt.savefig('./out/plot_logreg.png')
+        fig1 = plt.figure()
+        ax1 = plt.subplot(211)
+        ax1.plot(range(1, iteration + 1), np.array(train_error), '#3288bd', label="Training Error")
+        ax1.plot(range(1, iteration + 1), np.array(test_error), '#d53e4f', label="Testing Error")
+        ax1.set_title("Training and Testing Error by Iteration")
+        legend = ax1.legend(loc='upper right', shadow=True, fontsize='small')
+        plt.savefig('./out/logreg_train_test_err.png')
+
+        fig2 = plt.figure()
+        ax2 = plt.subplot(211)
+        ax2.plot(range(1, iteration + 1), np.array(alphas), '#99d594', label="alpha_t")
+        ax2.plot(range(1, iteration + 1), np.array(err_list), '#fc8d59', label="error_t")
+        ax2.set_title("alpha and Error per Iteration")
+        legend = ax2.legend(loc='upper right', shadow=True, fontsize='small')
+        plt.savefig('./out/logreg_alpha_err_plot.png')
+
+        fig3 = plt.figure()
+        ax3 = plt.subplot(211)
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 0], '#99d594', label="x[0]")
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 1], '#d6604d', label="x[7]")
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 2], '#4393c3', label="x[492]")
+        ax3.set_title("Weights of Three Points as a Function of their Iteration")
+        legend = ax3.legend(loc='upper center', shadow=True, fontsize='x-small')
+        plt.savefig('./out/logreg_three_points_weight_plot.png')
+
         pred_vals = self.sign(boost_final_prediction)
         acc, misc = predict.confusion_matrix_accuracy(pred_vals, label_test)
         print acc
@@ -484,7 +533,8 @@ if __name__ == '__main__':
     # naive_bayes = NaiveBayes()
     # naive_bayes.bayes_manage()
     boost = Boosting()
-    boost.boost_manage_logreg()
+    boost.boost_manage(1000)
+    boost.boost_manage_logreg(1000)
     # logreg = LogisticRegression()
     # logreg.online_log_reg()
 
