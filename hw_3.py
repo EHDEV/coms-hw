@@ -8,13 +8,9 @@ from matplotlib import pyplot as plt
 
 
 class Util:
-    # paths = {'pathxtrain': '', 'pathxtest': '', 'pathlabeltrain': '', 'pathlabeltest': ''}
-
     def __init__(self):
         self.pathxtrain = sys.argv[1]
         self.pathlabel = sys.argv[2]
-        # self.pathlabeltrain = sys.argv[3]
-        # self.pathlabeltest = sys.argv[4]
 
 
     def get_data(self):
@@ -60,13 +56,7 @@ class Prediction:
                 misclassified += [i]
 
         accuracy = count_right / len(pred_label)
-        # conf_mx = np.zeros((2, 2))
-        # misclassified_idxs = []
-        # for num in range(len(pred_label)):
-        # conf_mx[pred_label[num], label_test[num]] += 1
-        # if pred_label[num] != label_test[num]:
-        # misclassified_idxs += [num]
-        # accuracy = np.sum(np.diag(conf_mx)) / len(label_test)
+
         return accuracy, misclassified
 
 
@@ -75,13 +65,9 @@ class LogisticRegression:
 
         ut = Util()
         predict = Prediction()
-        xtrain_mx, xtest_mx, label_train, label_test = ut.get_data
+        xtrain_mx, xtest_mx, label_train, label_test = ut.get_data()
         classes_set_y = set(label_train)  # unique classes in y
 
-        # x0 = np.matrix(np.ones((xtrain_mx.shape[0], 1)))
-        # xtrain_mx = np.matrix(np.concatenate((np.array(x0), np.array(xtrain_mx)), axis=1))
-        # x0 = np.matrix(np.ones((xtest_mx.shape[0], 1)))
-        # xtest_mx = np.matrix(np.concatenate((np.array(x0), np.array(xtest_mx)), axis=1))
         w_shape = (len(classes_set_y), xtrain_mx.shape[1])
         w = np.matrix(np.zeros(w_shape))
 
@@ -99,10 +85,20 @@ class LogisticRegression:
                 w[cls] += (eta * sum_one_to_n)
             print w
 
-        pred_label = self.logit_classify(w, xtest_mx)
+        pred_label = self.logit_softmax_classify(w, xtest_mx)
 
-        conf = predict.confusion_matrix_accuracy(pred_label, label_test)
+        conf, misc = predict.confusion_matrix_accuracy(pred_label, label_test)
         print conf
+
+    def logit_softmax_classify(self, w, xtest):
+
+        res = xtest * w.T
+        pred = []
+
+        for row in res:
+            pred += [np.argmax(row, 1)[0, 0]]
+
+        return pred
 
     def logit_classify(self, x, w):
 
@@ -110,8 +106,8 @@ class LogisticRegression:
         extw = np.exp(x * w.T)
         res = np.array(extw / (1 + extw)).reshape(x.shape[0])
 
-        ones = np.where(res > 0.5)[0].tolist()
-        minus_ones = np.where(res <= 0.5)[0].tolist()
+        ones = np.where(res >= 0.5)[0].tolist()
+        minus_ones = np.where(res < 0.5)[0].tolist()
 
         pred[ones] = 1
         pred[minus_ones] = -1
@@ -135,37 +131,35 @@ class LogisticRegression:
 
         return result
 
+    def logit_noboost(self):
+
+        conf_acc = Prediction()
+        ut = Util()
+        xtr, xts, ytr, yts = ut.get_data()
+
+        coef = self.online_log_reg(xtr, ytr)
+
+        pred = self.logit_classify(xts, coef)
+
+        acc, misc = conf_acc.confusion_matrix_accuracy(pred, yts)
+
+        print 'logreg', acc, misc
+
     def online_log_reg(self, x, y):
 
         indices = np.arange(x.shape[0])
         np.random.permutation(indices)
-        ut = Util()
-        predict = Prediction()
-        xtrain_mx = x[indices]
-        label_train = y[indices]
 
-        # xtrain_mx, xtest_mx, label_train, label_test = ut.get_data()
-        classes_set_y = set(label_train)  # unique classes in y
+        xtrain_mx = np.matrix(x[indices, :])
+        label_train = y[indices, ]
 
-        # x0 = np.matrix(np.ones((xtrain_mx.shape[0], 1)))
-        # xtrain_mx = np.matrix(np.concatenate((np.array(x0), np.array(xtrain_mx)), axis=1))
-        # x0 = np.matrix(np.ones((xtest_mx.shape[0], 1)))
-        # xtest_mx = np.matrix(np.concatenate((np.array(x0), np.array(xtest_mx)), axis=1))
-        # w_shape = (len(classes_set_y), xtrain_mx.shape[1])
-
-        eta = .1
+        eta = .2
         n, d = xtrain_mx.shape
         w = np.matrix(np.zeros(d))
 
         for i in range(n):
-            sigmoid_ywx = 1 / (1 + np.exp(-1 * np.matrix(label_train[i]) * xtrain_mx[i] * w.T))
+            sigmoid_ywx = 1 / (1 + np.exp(-label_train[i] * xtrain_mx[i, :] * w.T))
             w += eta * (1 - sigmoid_ywx) * label_train[i] * xtrain_mx[i]
-
-        # pred_label = self.logit_classify(w, xtest_mx)
-
-        # acc, misc = predict.confusion_matrix_accuracy(pred_label, label_test)
-        # print acc
-        # print misc
 
         return w
 
@@ -206,8 +200,8 @@ class LDA:
         pred_labels = self.lda_classify(xtest_mx, w0, wd)
 
         acc, mis = predict.confusion_matrix_accuracy(pred_labels, label_test)
-
-        return mis
+        print 'lda', acc, mis
+        return acc, mis
 
     def lda_boost_classify(self, x, y):
         mu_list = []
@@ -343,13 +337,14 @@ class Boosting:
             dist_t *= np.exp(-1 * alpha_t * label_train * pred_labels_tr)
             dist_t /= np.sum(dist_t)
 
-            three_points_prob.append([dist_t[0], dist_t[7], dist_t[482]])
+            three_points_prob.append([dist_t[7], dist_t[33], dist_t[498]])
             alphas.append(alpha_t)
             # collect bias and coefficient parameters in a list to use later
             boost_classifier_params.append((bias, coef))
-            print t, ' ', alpha_t, misclassified_tr
+            # print t, ' ', alpha_t, misclassified_tr
 
         three_points_prob = np.array(three_points_prob)
+        print boost_classifier_params
         for i in range(iteration):
             w0 = boost_classifier_params[i][0]
             wd = boost_classifier_params[i][1]
@@ -374,15 +369,17 @@ class Boosting:
 
         fig3 = plt.figure()
         ax3 = plt.subplot(211)
-        ax3.plot(range(1, iteration + 1), three_points_prob[:, 0], '#99d594', label="x[0]")
-        ax3.plot(range(1, iteration + 1), three_points_prob[:, 1], '#d6604d', label="x[7]")
-        ax3.plot(range(1, iteration + 1), three_points_prob[:, 2], '#4393c3', label="x[492]")
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 0], '#99d594', label="w_t(7)")
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 1], '#d6604d', label="w_t(33)")
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 2], '#4393c3', label="w_t(498)")
         ax3.set_title("Weights of Three Points as a Function of their Iteration")
         legend = ax3.legend(loc='upper center', shadow=True, fontsize='x-small')
         plt.savefig('./out/lda_three_points_weight_plot.png')
 
         pred_vals = self.sign(boost_final_prediction)
         acc, misc = predict.confusion_matrix_accuracy(pred_vals, label_test)
+
+        print 'boost-lda', acc, misc
 
     def boost_manage_logreg(self, iteration=1000):
         ut = Util()
@@ -424,16 +421,19 @@ class Boosting:
             err_list.append(err_t)
             alpha_t = .5 * np.log((1 - err_t) / err_t)
             # update the prob distribution and normalize
-            dist_t *= np.exp(-1 * alpha_t * label_train * pred_labels_tr)
+            dist_t *= np.exp(-alpha_t * label_train * pred_labels_tr)
             dist_t /= np.sum(dist_t)
 
             alphas.append(alpha_t)
             boost_classifier_params.append(coef)
             acc_list.append(acc_ts)
-            three_points_prob.append([dist_t[0], dist_t[7], dist_t[492]])
-            print t, acc_ts, acc_tr, alpha_t
+            three_points_prob.append([dist_t[7], dist_t[33], dist_t[498]])
 
+            print t, acc_ts, acc_tr, alpha_t, err_t, max(dist_t)
+            #print t, np.sum(dist_t)
         three_points_prob = np.array(three_points_prob)
+        # print boost_classifier_params
+
         for i in range(iteration):
             w = boost_classifier_params[i]
             preds = lr.logit_classify(xtest_mx, w)
@@ -457,16 +457,17 @@ class Boosting:
 
         fig3 = plt.figure()
         ax3 = plt.subplot(211)
-        ax3.plot(range(1, iteration + 1), three_points_prob[:, 0], '#99d594', label="x[0]")
-        ax3.plot(range(1, iteration + 1), three_points_prob[:, 1], '#d6604d', label="x[7]")
-        ax3.plot(range(1, iteration + 1), three_points_prob[:, 2], '#4393c3', label="x[492]")
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 0], '#99d594', label="w_t(7])")
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 1], '#d6604d', label="w_t(33)")
+        ax3.plot(range(1, iteration + 1), three_points_prob[:, 2], '#4393c3', label="w_t(498)")
         ax3.set_title("Weights of Three Points as a Function of their Iteration")
         legend = ax3.legend(loc='upper center', shadow=True, fontsize='x-small')
         plt.savefig('./out/logreg_three_points_weight_plot.png')
 
         pred_vals = self.sign(boost_final_prediction)
         acc, misc = predict.confusion_matrix_accuracy(pred_vals, label_test)
-        print acc
+
+        print 'boost-logreg', acc, misc
 
     def sign(self, arr_var):
 
@@ -528,13 +529,13 @@ class Boosting:
 
 
 if __name__ == '__main__':
-    # ld = LDA()
-    # ld.lda_manage()
-    # naive_bayes = NaiveBayes()
-    # naive_bayes.bayes_manage()
+    ld = LDA()
+    ld.lda_manage()
+    logreg = LogisticRegression()
+    logreg.logit_noboost()
     boost = Boosting()
-    boost.boost_manage(1000)
+    # boost.boost_manage(1000)
     boost.boost_manage_logreg(1000)
-    # logreg = LogisticRegression()
+
     # logreg.online_log_reg()
 
