@@ -412,16 +412,18 @@ class Boosting:
             # get prediction, accuracy and misclassified rows for test and train data
             pred_labels_tr = lr.logit_classify(xtrain_mx, coef)
             pred_labels_ts = lr.logit_classify(xtest_mx, coef)
+            pred_labels_t = lr.logit_classify(xtrain_mx[bt_sample_idx, :], coef)
             acc_tr, misclassified_tr = predict.confusion_matrix_accuracy(pred_labels_tr, label_train)
             acc_ts, misclassified_ts = predict.confusion_matrix_accuracy(pred_labels_ts, label_test)
+            acc_t, misclassified_t = predict.confusion_matrix_accuracy(pred_labels_t, label_train[bt_sample_idx])
             train_error.append(len(misclassified_tr) / float(label_train.shape[0]))
             test_error.append(len(misclassified_ts) / float(label_test.shape[0]))
             # get error and alpha values
-            err_t = np.sum(dist_t[misclassified_tr])
+            err_t = np.sum(dist_t[misclassified_t])
             err_list.append(err_t)
-            alpha_t = .5 * np.log((1 - err_t) / err_t)
+            alpha_t = .5 * np.log((1 - err_t ) / err_t )
             # update the prob distribution and normalize
-            dist_t *= np.exp(-alpha_t * label_train * pred_labels_tr)
+            dist_t *= np.exp(-alpha_t * label_train[bt_sample_idx] * pred_labels_t)
             dist_t /= np.sum(dist_t)
 
             alphas.append(alpha_t)
@@ -429,7 +431,7 @@ class Boosting:
             acc_list.append(acc_ts)
             three_points_prob.append([dist_t[7], dist_t[33], dist_t[498]])
 
-            print t, acc_ts, acc_tr, alpha_t, err_t, max(dist_t)
+            print t, acc_ts, acc_tr, alpha_t, err_t, misclassified_t
             #print t, np.sum(dist_t)
         three_points_prob = np.array(three_points_prob)
         # print boost_classifier_params
@@ -535,7 +537,7 @@ if __name__ == '__main__':
     logreg.logit_noboost()
     boost = Boosting()
     # boost.boost_manage(1000)
-    boost.boost_manage_logreg(1000)
+    boost.boost_manage_logreg(500)
 
     # logreg.online_log_reg()
 
