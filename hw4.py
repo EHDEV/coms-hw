@@ -4,6 +4,7 @@ import numpy as np
 import pandas as p
 import sys
 from matplotlib import pyplot as plt
+from sklearn.cluster import KMeans
 
 
 def get_matrices():
@@ -116,6 +117,8 @@ def matrix_factorize(iteration=100):
     u = np.matrix(np.random.multivariate_normal(np.zeros(d), np.identity(d) * sigmasq, u_size))
     v = np.matrix(np.random.multivariate_normal(np.zeros(d), np.identity(d) * sigmasq, v_size))
 
+    np.random.seed(100)
+
     for itr in range(iteration):
         print itr
         for urow_idx in range(u_size):
@@ -158,8 +161,26 @@ def matrix_factorize(iteration=100):
 
         rmse_list += [get_rmse(pred_at_iter, m_test, train_movieids, train_userids)]
 
+    fc_idx = np.random.random_integers(0, 30, 5).tolist()
+
     closest_movies(movies_list, v)
-    kmeans_movies(u)
+    centroids, clusters = kmeans_movies(u)
+    km_sklrn = KMeans(30)
+    km_sklrn.fit(u)
+    sklrn_cen = km_sklrn.cluster_centers_
+    sklrn_clust = km_sklrn.labels_
+    five_topten = movie_user_characterize(centroids[fc_idx], clusters, v)
+    sklrn_five_tt = movie_user_characterize(sklrn_cen[fc_idx], sklrn_clust, v)
+
+    for l in range(len(five_topten)):
+        print 'For the ', str(l), 'the cluster, we have the following 10 movies with the largest dot product'
+        for m in five_topten[l]:
+            print '|--> ', movies_list[m]
+
+    for l in range(len(sklrn_five_tt)):
+        print 'For the ', str(l), 'sklearn'
+        for m in sklrn_five_tt[l]:
+            print '<>-> ', movies_list[m]
 
     # get a copy of the prediction and set the cells in the copy that original matrix's nan/0 cells to 0
     # pr_sparse = np.round(pr_sparse, 1)
@@ -201,8 +222,8 @@ def get_rmse(preds, test_data, train_movie_ids, train_user_ids):
 
 
 def closest_movies(movies_list, v, n=5):
-    three_movies = np.random.choice(v.shape[0], 3, replace=False).tolist()
-
+    # three_movies = np.random.choice(v.shape[0], 3, replace=False).tolist()
+    three_movies = [1617, 1015, 28]
     for i in three_movies:
         dist = []
         five_movies = []
@@ -267,16 +288,37 @@ def kmeans_movies(udata, bigK=30, iteration=20):
     plt.savefig("./out/mxf_objective_plot_k" + str(bigK) + ".png")
     plt.close()
 
-    plt.scatter(udata[:, 0], udata[:, 1], c=ci)
-    plt.scatter(mu[:, 0], mu[:, 1], c=colors, s=60, marker='+')
-    plt.title("Plot of 500 Points and Their Clusters. K = " + str(bigK))
-    plt.legend(loc='upper right', shadow=True, fontsize='small')
-
-    plt.savefig('./out/mxf_points_plot_k' + str(bigK) + '.png')
+    # plt.scatter(udata[:, 0], udata[:, 1], c=ci)
+    # plt.scatter(mu[:, 0], mu[:, 1], c=colors, s=60, marker='+')
+    # plt.title("Plot of 500 Points and Their Clusters. K = " + str(bigK))
+    # plt.legend(loc='upper right', shadow=True, fontsize='small')
+    #
+    # plt.savefig('./out/mxf_points_plot_k' + str(bigK) + '.png')
 
     return mu, ci
 
+def movie_user_characterize(centroids, clusters, vmovies):
+
+    dp = np.dot(vmovies, centroids.T)
+    topten = []
+
+    # for center in range(centroids.shape[0]):
+    #     centroids[center] * vmovies.T
+
+    for col in range(dp.shape[1]):
+        # copying the column of centroid col
+        mlst = dp[:, col].tolist()
+        tt = []
+        for r in range(10):
+            idx = np.argmax(mlst)
+            mlst[idx] = -1
+            tt += [idx]
+
+        topten.append(tt)
+
+    return topten
+
 if __name__ == '__main__':
-    # c, m = kmeans_clustering(7)
-    matrix_factorize(5)
+    c, m = kmeans_clustering(5)
+    # matrix_factorize(100)
 
