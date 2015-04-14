@@ -89,7 +89,7 @@ def kmeans_clustering(bigK, iteration=20):
         sumdist += [ob]
 
     plt.plot(range(iteration), sumdist, label="Objective Function", c=colors[1])
-    plt.title("Plot of K Means Objective Function by Iteration")
+    plt.title("Plot of K Means Objective Function by Iteration k = " + str(bigK))
     plt.savefig("./out/kmeans_objective_plot_k" + str(bigK) + ".png")
     plt.close()
 
