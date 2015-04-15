@@ -161,7 +161,7 @@ def matrix_factorize(iteration=100):
 
         rmse_list += [get_rmse(pred_at_iter, m_test, train_movieids, train_userids)]
 
-    fc_idx = np.random.random_integers(0, 30, 5).tolist()
+
 
     closest_movies(movies_list, v)
     centroids, clusters = kmeans_movies(u)
@@ -169,28 +169,30 @@ def matrix_factorize(iteration=100):
     km_sklrn.fit(u)
     sklrn_cen = km_sklrn.cluster_centers_
     sklrn_clust = km_sklrn.labels_
-    five_topten = movie_user_characterize(centroids[fc_idx], clusters, v)
-    sklrn_five_tt = movie_user_characterize(sklrn_cen[fc_idx], sklrn_clust, v)
+    # five_topten = movie_user_characterize(centroids, clusters, v)
+    sklrn_five_tt, sklrn_five_dist = movie_user_characterize(sklrn_cen, sklrn_clust, v)
 
-    for l in range(len(five_topten)):
-        print 'For the ', str(l), 'the cluster, we have the following 10 movies with the largest dot product'
-        for m in five_topten[l]:
-            print '|--> ', movies_list[m]
+    # for l in range(len(five_topten)):
+    #     print 'For the ', str(l), 'the cluster, we have the following 10 movies with the largest dot product'
+    #     for m in five_topten[l]:
+    #         print '|--> ', movies_list[m]
 
     for l in range(len(sklrn_five_tt)):
         print 'For the ', str(l), 'sklearn'
-        for m in sklrn_five_tt[l]:
-            print '<>-> ', movies_list[m]
+        for m in range(len(sklrn_five_tt[l])):
+            print '<>-> ', movies_list[sklrn_five_tt[l][m]], "\t", str(sklrn_five_dist[l][m])
 
     # get a copy of the prediction and set the cells in the copy that original matrix's nan/0 cells to 0
     # pr_sparse = np.round(pr_sparse, 1)
     # for urow_idx in range(mmx.shape[0]):
     # idx = np.where(mmx[urow_idx, :] == 0)[0]
     # pr_sparse[urow_idx, idx] = np.tile(0, pr_sparse[urow_idx, idx].shape)
-    plt.plot(range(1, iteration + 1), np.array(rmse_list), '#3288bd', label="RMSE by Iteration")
+    plt.plot(range(1, iteration + 1), np.array(rmse_list), '#3288bd')
+    plt.title("RMSE of Predictions by Iteration")
     plt.savefig('./out/mxf_rmse.png')
     plt.close()
-    plt.plot(range(1, iteration + 1), objlist, c='r', label="Log Likelihood by Iteration")
+    plt.plot(range(1, iteration + 1), objlist, c='r')
+    plt.title("Joint Log Likelihood as a Function of Iteration")
     plt.savefig('./out/mxf_obj_plt.png')
 
     # indices of pred_at_iter that are rounded to zero. To be set to 1
@@ -223,17 +225,14 @@ def get_rmse(preds, test_data, train_movie_ids, train_user_ids):
 
 def closest_movies(movies_list, v, n=5):
     # three_movies = np.random.choice(v.shape[0], 3, replace=False).tolist()
-    three_movies = [1617, 1015, 28]
+    three_movies = [0, 1617, 1015, 28]
     for i in three_movies:
         dist = []
         five_movies = []
         for j in range(v.shape[0]):
-            if j != i:
                 dist += [np.linalg.norm(v[i] - v[j]) ** 2]
-            else:
-                continue
 
-        top_distances = sorted(dist)[0:5]
+        top_distances = sorted(dist)[0:10]
 
         for a in top_distances:
 
@@ -299,8 +298,9 @@ def kmeans_movies(udata, bigK=30, iteration=20):
 
 def movie_user_characterize(centroids, clusters, vmovies):
 
-    dp = np.dot(vmovies, centroids.T)
+    dp = np.array(np.dot(vmovies, centroids.T))
     topten = []
+    dist_tt = []
 
     # for center in range(centroids.shape[0]):
     #     centroids[center] * vmovies.T
@@ -309,16 +309,19 @@ def movie_user_characterize(centroids, clusters, vmovies):
         # copying the column of centroid col
         mlst = dp[:, col].tolist()
         tt = []
+        dtt = []
         for r in range(10):
             idx = np.argmax(mlst)
+            dtt += [mlst[idx]]
             mlst[idx] = -1
             tt += [idx]
 
         topten.append(tt)
+        dist_tt.append(dtt)
 
-    return topten
+    return topten, dist_tt
 
 if __name__ == '__main__':
-    c, m = kmeans_clustering(5)
-    # matrix_factorize(100)
+    # c, m = kmeans_clustering(5)
+    matrix_factorize(100)
 
