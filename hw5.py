@@ -85,7 +85,7 @@ def transition_matrix(iteration=10):
 
         rankings = sorted(range(size), key=np.array(wt).reshape(size, ).tolist().__getitem__, reverse=True)
 
-        l1_err = LA.norm((eigvec[:, 0] - wt.T), ord=1)
+        l1_err = LA.norm((wt.T - eigvec[:, 0]) / np.sum(eigvec[:, 0]), ord=1)
         wt_eig_norm += [l1_err]
 
         # print team_names[rankings]
