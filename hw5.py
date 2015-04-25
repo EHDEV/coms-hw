@@ -97,7 +97,6 @@ def transition_matrix(iteration=10):
 
     return rankings, wt, team_names[rankings]
 
-
 if __name__ == '__main__':
     transition_matrix()
 
