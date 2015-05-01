@@ -9,7 +9,6 @@ from numpy import linalg as LA
 
 
 class Problem1:
-
     def __init__(self):
         pass
 
@@ -75,7 +74,7 @@ class Problem1:
                 M[j2, j1] += 1 + (float(game_data[row, pj1]) / (game_data[row, pj1] + game_data[row, pj2]))
 
 
-            else:   # game_data[row, pj2] > game_data[row, pj1]:
+            else:  # game_data[row, pj2] > game_data[row, pj1]:
 
                 M[j1, j1] += (float(game_data[row, pj1]) / (game_data[row, pj1] + game_data[row, pj2]))
 
@@ -93,7 +92,6 @@ class Problem1:
         first_eigvec = eigvec[:, np.argmax(eigvalue)]
 
         for row in range(iteration):
-
             rankings = sorted(range(size), key=np.array(wt).reshape(size, ).tolist().__getitem__, reverse=True)
 
             l1_err = LA.norm(wt.T - (first_eigvec / np.sum(first_eigvec)), ord=1)
@@ -102,8 +100,12 @@ class Problem1:
             wt *= M
             # print team_names[rankings[0:10]]
 
-        plt.plot(range(iteration), wt_eig_norm, c=colors[1])
+        print l1_err
+
+        plt.plot(range(iteration), wt_eig_norm, c='#b2182b')
         plt.title("Plot of M.T Eigenvector L1 Distance from W_t")
+        plt.ylabel('L1 Distance from wt')
+        plt.xlabel('Iteration')
         plt.savefig("./out/hw5/eig_wt_err.png")
         plt.close()
 
@@ -115,12 +117,10 @@ class Problem1:
 
 
 class Problem2:
-
     def __init__(self):
         pass
 
     def get_data(self):
-
         """ fetches data from file into a pandas dataframe which will then
             be converted into a numpy matrix
         """
@@ -134,7 +134,6 @@ class Problem2:
         return faces_m
 
     def nmf(self, iteration=20):
-
         K = 25
 
         penality = []
@@ -148,7 +147,6 @@ class Problem2:
         H = np.random.uniform(0, 1, K * m).reshape((K, m))
 
         for iterate in range(iteration):
-
             # Updating H
             h_num = H * np.dot(W.T, X)
             h_den = np.dot(np.dot(W.T, W), H)
@@ -165,14 +163,39 @@ class Problem2:
             WH = np.dot(W, H)
             penality += [np.sum((X - WH) ** 2)]
 
-        plt.plot(range(iteration), penality, c='g')
+        three_images = [4, 1, 2]
+
+        for th in three_images:
+            # Getting the weight that is largest from the 25 weights in H
+            hix = np.argmax(H[:, th])
+
+            im_mx = W[:, hix].reshape(32, 32)
+            self.plot_image(X[:, th].reshape(32, 32), im_mx, th, hix)
+
+        # for tx in three_images:
+        #     im_mx = X[:, tx].reshape(32, 32)
+        #     self.plot_image(im_mx, tx, 'x')
+
+        plt.plot(range(iteration), penality, c='#9e0142')
         plt.title("Plot of Objective as a Function of Iteration")
+        plt.ylabel('Squared Error Objective')
+        plt.xlabel('Iteration')
         plt.savefig("./out/hw5/nmf_euclidean_obj_plot.png")
+        plt.close()
+
+    def plot_image(self, x_array, w_array, th, hix):
+
+        plt.imshow(x_array, cmap="Greys_r")
+        plt.axis('off')
+        plt.savefig('./out/hw5/orig_x_img_' + str(th) + '.png')
+        plt.close()
+        plt.imshow(w_array, cmap="Greys_r")
+        plt.axis('off')
+        plt.savefig('./out/hw5/image_nmf_w' + str(th) + '.png')
         plt.close()
 
 
 class Problem2P2:
-
     def get_data(self):
 
         docs_path = sys.argv[4]
@@ -189,15 +212,16 @@ class Problem2P2:
 
         doc_freq, vocab = self.get_data()
 
-        rank = 25
+        K = 25
         m = len(doc_freq)
         n = vocab.shape[0]
+        obj_list = []
 
         div_penalties = []
 
         X = np.zeros((n, m))
-        W = np.random.uniform(0, 1, n * rank).reshape((n, rank))
-        H = np.random.uniform(0, 1, rank * m).reshape((rank, m))
+        W = np.random.uniform(0, 1, n * K).reshape((n, K))
+        H = np.random.uniform(0, 1, K * m).reshape((K, m))
 
         # Constructing the data matrix X line by line, word by word
         for didx, line in enumerate(doc_freq):
@@ -205,10 +229,48 @@ class Problem2P2:
 
             for item in words_and_counts:
                 widx, count = tuple(item.split(':'))
-                X[widx, didx] = count
+                X[int(widx) - 1, didx] = count
 
+        for iterate in range(iteration):
 
+            WH = np.dot(W, H) # Approximation of X
+            xwh_purple = X / (WH + 1e-16) # Purple Matrix
+            Wtn = W.T / np.sum(W.T, 1).reshape(W.T.shape[0], 1) # Row normalized W matrix (cyan)
 
+            H = H * np.dot(Wtn, xwh_purple) # Updating H
+
+            WH = np.dot(W, H)
+            xwh_purple = X / (WH + 1e-16) # Creating the purple matrix again for W update
+            Htn = H.T / np.sum(H.T, 0).reshape(1, H.T.shape[1]) # Column normalizaing H
+
+            W = W * np.dot(xwh_purple, Htn) # Updating W
+
+            # Matrix multiplying for the objective function then sum ober all the values of the matrix
+            obj_m = -(X * np.nan_to_num(np.log(WH)) - WH)
+            obj_list += [np.sum(obj_m)]
+
+        # Normalizing the columns of W to sum to 1
+
+        W = W / np.sum(W, 0).reshape(1, W.shape[1])
+
+        # five_cols = np.random.random_integers(0, W.shape[1], 5)
+
+        five_cols = [22, 12, 7, 10, 17]
+
+        tmtop = []
+        for col in five_cols:
+
+            topten = np.argsort(W[:, col])[::-1][0:10]
+            print 'For Column ', col, ' the top ten words are: '
+            ttmx = np.concatenate((vocab.loc[topten].values, W[topten, col].reshape(len(topten), 1)), 1)
+            print ttmx
+
+        plt.plot(range(iteration), obj_list, c='#d53e4f')
+        plt.title("Plot of Divergence Objective as a Function of Iteration")
+        plt.ylabel('Divergence Objective')
+        plt.xlabel('Iteration')
+        plt.savefig("./out/hw5/nmf_divergence_obj_plot.png")
+        plt.close()
 
 if __name__ == '__main__':
     p1 = Problem1()
@@ -217,5 +279,7 @@ if __name__ == '__main__':
     # p2 = Problem2()
     # p2.nmf(200)
 
+    # pp2 = Problem2P2()
+    # pp2.nmf_divergence(200)
 
 
